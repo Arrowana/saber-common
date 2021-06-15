@@ -5,25 +5,96 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConnectedWallet, WalletAdapter } from "../adapters/types";
 import { WALLET_PROVIDERS, WalletProviderInfo, WalletType } from "../providers";
 import { useLocalStorageState } from "./useLocalStorageState";
+import { usePrevious } from "./usePrevious";
 
-export interface UseWallet<T extends boolean = boolean> {
+/**
+ * Context for wallet-related variables.
+ */
+export interface WalletContext<T extends boolean = boolean> {
+  /**
+   * The wallet connected.
+   */
   wallet?: WalletAdapter<T>;
+  /**
+   * Public key of the connected wallet.
+   */
   publicKey?: PublicKey;
+  /**
+   * Information about the provider of the chosen wallet.
+   */
   provider?: WalletProviderInfo;
+  /**
+   * If true, this wallet is connected.
+   */
   connected: T;
-  activate: (walletType: WalletType) => void;
+  /**
+   * Attempts to connect to a wallet with the given WalletType.
+   */
+  activate: (walletType: WalletType) => Promise<void>;
 }
 
+const DEFAULT_AUTOCONNECT_ERROR_HANDLER = (
+  error: Error,
+  _wallet: WalletAdapter,
+  provider: WalletProviderInfo
+) => {
+  console.warn(
+    `Error attempting to automatically connect to ${provider.name}`,
+    error
+  );
+};
+
 export interface UseWalletArgs {
+  /**
+   * Callback triggered when a wallet is connected.
+   */
   onConnect?: (
     wallet: WalletAdapter<true>,
     provider: WalletProviderInfo
   ) => void;
+
+  /**
+   * Callback triggered when a wallet is disconnected.
+   */
   onDisconnect?: (
     wallet: WalletAdapter<false>,
     provider: WalletProviderInfo
   ) => void;
+
+  /**
+   * Automatically attempt to connect to the wallet on the initial page load. Defaults to false.
+   */
+  autoconnectOnInitialLoad?: boolean;
+
+  /**
+   * Automatically attempt to reconnect to the wallet after a network change. Defaults to false.
+   */
+  reconnectOnNetworkChange?: boolean;
+
+  /**
+   * Connects eagerly to a provider if the provider supports it. Defaults to true.
+   */
+  eagerlyConnect?: boolean;
+
+  /**
+   * Callback triggered whenever a wallet cannot automatically connect.
+   */
+  onAutoconnectError?: (
+    error: Error,
+    wallet: WalletAdapter,
+    provider: WalletProviderInfo
+  ) => void;
+}
+
+interface UseWalletArgsInternal extends UseWalletArgs {
+  /**
+   * (internal) The network to connect to.
+   */
   network: Network;
+
+  /**
+   * (internal) The endpoint of the wallet to connect to.
+   */
   endpoint: string;
 }
 
@@ -32,7 +103,11 @@ export const useWalletInternal = ({
   onDisconnect,
   network,
   endpoint,
-}: UseWalletArgs): UseWallet<boolean> => {
+  autoconnectOnInitialLoad = false,
+  reconnectOnNetworkChange = false,
+  eagerlyConnect = true,
+  onAutoconnectError = DEFAULT_AUTOCONNECT_ERROR_HANDLER,
+}: UseWalletArgsInternal): WalletContext<boolean> => {
   const [walletTypeString, setWalletTypeString] = useLocalStorageState<
     string | null
   >("use-solana/wallet-type", null);
@@ -48,22 +123,70 @@ export const useWalletInternal = ({
     | readonly [undefined, undefined] = useMemo(() => {
     if (walletType) {
       const provider = WALLET_PROVIDERS[walletType];
-      console.log("New wallet", provider.url, network);
+      console.log(`Switched to new wallet for provider ${provider.name}`, {
+        provider,
+        network,
+        endpoint,
+      });
       return [provider, new provider.makeAdapter(provider.url, endpoint)];
     }
     return [undefined, undefined];
   }, [walletType, network, endpoint]);
 
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
+  const previous = usePrevious({ network });
+
+  useEffect(() => {
+    if (!reconnectOnNetworkChange) {
+      wallet?.disconnect();
+    }
+  }, [network, reconnectOnNetworkChange, wallet]);
+
+  useEffect(() => {
+    setIsInitialLoad(false);
+
+    if (wallet && provider) {
+      // don't do anything if we won't reconnect on network change
+      if (!reconnectOnNetworkChange && previous?.network !== network) {
+        return;
+      }
+
+      const canEagerlyConnect = provider.canEagerlyConnect && eagerlyConnect;
+      if (
+        isInitialLoad &&
+        // if we are on the initial load and can't eagerly connect, don't do anything
+        (!canEagerlyConnect ||
+          // don't do anything if it's the initial load and we don't want to autoconnect
+          !autoconnectOnInitialLoad)
+      ) {
+        return;
+      }
+
+      // only eagerly connect if the provider supports it
+      const doEager = isInitialLoad && canEagerlyConnect;
+      const timeout = setTimeout(() => {
+        void wallet
+          .connect({ eager: doEager })
+          .catch((e) => onAutoconnectError(e as Error, wallet, provider));
+      }, 500);
+      return () => clearTimeout(timeout);
+    }
+
+    // disabled lint for previous network b/c it comes from a ref
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    wallet,
+    provider,
+    onAutoconnectError,
+    network,
+    reconnectOnNetworkChange,
+    autoconnectOnInitialLoad,
+    isInitialLoad,
+    eagerlyConnect,
+  ]);
+
   useEffect(() => {
     if (wallet && provider) {
-      setTimeout(() => {
-        void wallet.connect().catch((e) => {
-          console.warn(
-            `Error attempting to automatically connect to ${provider.name}`,
-            e
-          );
-        });
-      }, 500);
       wallet.on("connect", () => {
         if (wallet?.publicKey) {
           setConnected(true);

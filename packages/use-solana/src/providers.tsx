@@ -59,6 +59,7 @@ export const WALLET_PROVIDERS: { [W in WalletType]: WalletProviderInfo } = {
     makeAdapter: PhantomWalletAdapter,
 
     isInstalled: () => window.solana?.isPhantom === true,
+    canEagerlyConnect: true,
   },
   [WalletType.MathWallet]: {
     name: "MathWallet",
@@ -84,4 +85,8 @@ export interface WalletProviderInfo {
   makeAdapter: WalletAdapterConstructor;
   isInstalled?: () => boolean;
   isMobile?: boolean;
+  /**
+   * If true, this provider supports eager connection.
+   */
+  canEagerlyConnect?: boolean;
 }

@@ -57,7 +57,7 @@ export class PhantomWalletAdapter
     return this._provider.signTransaction(transaction);
   }
 
-  connect = async (): Promise<void> => {
+  connect = async ({ eager }: { eager?: boolean } = {}): Promise<void> => {
     if (!this._provider) {
       window.open("https://phantom.app/", "_blank", "noopener noreferrer");
       throw new Error("Phantom not installed");
@@ -68,7 +68,11 @@ export class PhantomWalletAdapter
     if (!this._provider.listeners("disconnect").length) {
       this._provider?.on("disconnect", this._handleDisconnect);
     }
-    await this._provider?.connect();
+    if (eager) {
+      await this._provider?.connect({ onlyIfTrusted: true });
+    } else {
+      await this._provider?.connect();
+    }
   };
 
   disconnect(): void {

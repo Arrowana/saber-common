@@ -2,23 +2,27 @@ import React, { ReactNode } from "react";
 import { createContainer } from "unstated-next";
 
 import {
-  ConnectionArgs,
   ConnectionContext,
+  UseConnectionArgs,
   useConnectionInternal,
 } from "./utils/useConnectionInternal";
 import {
-  UseWallet,
   UseWalletArgs,
   useWalletInternal,
+  WalletContext,
 } from "./utils/useWalletInternal";
 
 export interface UseSolana<T extends boolean = boolean>
   extends ConnectionContext,
-    UseWallet<T> {}
+    WalletContext<T> {}
 
-export interface UseSolanaArgs
-  extends ConnectionArgs,
-    Pick<UseWalletArgs, "onConnect" | "onDisconnect"> {}
+/**
+ * Arguments for constructing a new Solana context.
+ *
+ * Note: ensure that callbacks are either wrapped in `useCallback` or defined statically,
+ * otherwise the page will re-render extremely frequently.
+ */
+export interface UseSolanaArgs extends UseConnectionArgs, UseWalletArgs {}
 
 /**
  * Provides Solana.

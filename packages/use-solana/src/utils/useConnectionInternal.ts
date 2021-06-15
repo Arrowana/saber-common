@@ -35,7 +35,7 @@ const makeNetworkConfigMap = (
     DEFAULT_NETWORK_CONFIG_MAP
   );
 
-export interface ConnectionArgs {
+export interface UseConnectionArgs {
   defaultNetwork?: Network;
   networkConfigs?: PartialNetworkConfigMap;
 }
@@ -48,7 +48,7 @@ export const useConnectionInternal = ({
   // default to mainnet-beta
   defaultNetwork = "mainnet-beta",
   networkConfigs = DEFAULT_NETWORK_CONFIG_MAP,
-}: ConnectionArgs): ConnectionContext => {
+}: UseConnectionArgs): ConnectionContext => {
   const [network, setNetwork] = useLocalStorageState<Network>(
     "use-solana/network",
     defaultNetwork
