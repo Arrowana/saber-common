@@ -100,6 +100,7 @@ export const WALLET_PROVIDERS: { [W in WalletType]: WalletProviderInfo } = {
     url: "https://solflare.com/provider",
     icon: SOLFLARE,
     makeAdapter: Wallet,
+    isMobile: true,
   },
   [WalletType.SolflareExtension]: {
     name: "Solflare Extension",
